@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Dashboard en Tiempo Real</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; background: #f0f0f0; }
+    .counter { font-size: 1.6rem; margin: 10px; }
+    .video { border: 3px solid #222; margin: 20px auto; width: 1020px; }
+  </style>
+</head>
+<body>
+  <h1>Conteo de Personas en Tiempo Real</h1>
+
+  <div class="counter">Entradas hoy: <span id="entradas">0</span></div>
+  <div class="counter">Salidas hoy: <span id="salidas">0</span></div>
+  <div class="counter">Personas actuales: <span id="actuales">0</span></div>
+
+  <img class="video" src="{{ url_for('video') }}" alt="Stream en vivo" />
+
+  <script>
+    async function actualizarStats() {
+      try {
+        const res = await fetch('/stats');
+        const data = await res.json();
+        document.getElementById('entradas').textContent = data.entradas;
+        document.getElementById('salidas').textContent = data.salidas;
+        document.getElementById('actuales').textContent = data.actuales;
+      } catch (e) {
+        console.error('Error actualizando estadísticas:', e);
+      }
+    }
+
+    // Actualiza cada segundo
+    setInterval(actualizarStats, 1000);
+    // Actualiza al cargar la página
+    actualizarStats();
+  </script>
+</body>
+</html>
