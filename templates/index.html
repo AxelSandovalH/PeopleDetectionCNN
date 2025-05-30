@@ -1,40 +1,618 @@
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <title>Dashboard en Tiempo Real</title>
+  <title>Sistema de Monitoreo - Contador de Personas</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; text-align: center; background: #f0f0f0; }
-    .counter { font-size: 1.6rem; margin: 10px; }
-    .video { border: 3px solid #222; margin: 20px auto; width: 1020px; }
-  </style>
-</head>
-<body>
-  <h1>Conteo de Personas en Tiempo Real</h1>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
-  <div class="counter">Entradas hoy: <span id="entradas">0</span></div>
-  <div class="counter">Salidas hoy: <span id="salidas">0</span></div>
-  <div class="counter">Personas actuales: <span id="actuales">0</span></div>
+    body {
+      font-family: 'Roboto Mono', 'Consolas', 'Monaco', monospace;
+      background: #0a0a0a;
+      color: #e0e0e0;
+      min-height: 100vh;
+      padding: 20px;
+      position: relative;
+      overflow-x: hidden;
+    }
 
-  <img class="video" src="{{ url_for('video') }}" alt="Stream en vivo" />
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: 
+        radial-gradient(circle at 15% 25%, rgba(0, 255, 0, 0.02) 0%, transparent 30%),
+        radial-gradient(circle at 85% 75%, rgba(255, 255, 255, 0.01) 0%, transparent 40%);
+      pointer-events: none;
+      z-index: -1;
+    }
 
-  <script>
-    async function actualizarStats() {
-      try {
-        const res = await fetch('/stats');
-        const data = await res.json();
-        document.getElementById('entradas').textContent = data.entradas;
-        document.getElementById('salidas').textContent = data.salidas;
-        document.getElementById('actuales').textContent = data.actuales;
-      } catch (e) {
-        console.error('Error actualizando estadísticas:', e);
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      position: relative;
+    }
+
+    h1 {
+      color: #00ff00;
+      font-size: 1.8rem;
+      font-weight: 400;
+      text-align: left;
+      margin-bottom: 2rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      border-left: 3px solid #00ff00;
+      padding-left: 15px;
+    }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+      margin-bottom: 2rem;
+    }
+
+    .video-container {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 4px;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+      position: relative;
+    }
+
+    .video-container::before {
+      content: '● REC';
+      position: absolute;
+      top: 10px;
+      right: 15px;
+      color: #ff0000;
+      font-size: 0.8rem;
+      font-weight: bold;
+      animation: rec-blink 2s infinite;
+    }
+
+    @keyframes rec-blink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0.3; }
+    }
+
+    img {
+      width: 100%;
+      height: auto;
+      border: 1px solid #444;
+      display: block;
+      margin: 0 auto;
+      filter: contrast(1.1) brightness(0.9);
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+
+    .stat-card {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 4px;
+      padding: 1.5rem;
+      text-align: left;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      transition: border-color 0.2s ease;
+      position: relative;
+    }
+
+    .stat-card:hover {
+      border-color: #555;
+    }
+
+    .stat-card.current {
+      border-left: 3px solid #00ff00;
+    }
+
+    .stat-card.entries {
+      border-left: 3px solid #0099ff;
+    }
+
+    .stat-card.exits {
+      border-left: 3px solid #ff6600;
+    }
+
+    .stat-title {
+      font-size: 0.75rem;
+      font-weight: 400;
+      color: #888;
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .stat-number {
+      font-size: 2rem;
+      font-weight: 300;
+      color: #e0e0e0;
+      line-height: 1;
+      margin-bottom: 0.3rem;
+      font-family: 'Roboto Mono', monospace;
+    }
+
+    .stat-card.current .stat-number {
+      color: #00ff00;
+    }
+
+    .stat-card.entries .stat-number {
+      color: #0099ff;
+    }
+
+    .stat-card.exits .stat-number {
+      color: #ff6600;
+    }
+
+    .stat-label {
+      font-size: 0.7rem;
+      color: #666;
+      font-weight: 400;
+      text-transform: uppercase;
+    }
+
+    .loading {
+      opacity: 0.5;
+    }
+
+    .loading .stat-number::after {
+      content: '_';
+      animation: cursor-blink 1s infinite;
+    }
+
+    @keyframes cursor-blink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0; }
+    }
+
+    /* Sección de gráficas */
+    .charts-section {
+      margin-top: 3rem;
+    }
+
+    .charts-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+    }
+
+    .chart-container {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 4px;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+      position: relative;
+    }
+
+    .chart-title {
+      color: #00ff00;
+      font-size: 1rem;
+      font-weight: 400;
+      margin-bottom: 1rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid #333;
+      padding-bottom: 0.5rem;
+    }
+
+    .chart-canvas {
+      position: relative;
+      height: 300px;
+      width: 100%;
+    }
+
+    /* Indicadores de estado del sistema */
+    .system-status {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      display: flex;
+      gap: 8px;
+      z-index: 1000;
+    }
+
+    .status-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #333;
+    }
+
+    .status-indicator.online {
+      background: #00ff00;
+      animation: pulse-green 2s infinite;
+    }
+
+    .status-indicator.recording {
+      background: #ff0000;
+      animation: pulse-red 1s infinite;
+    }
+
+    .status-indicator.motion {
+      background: #ff6600;
+    }
+
+    @keyframes pulse-green {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    @keyframes pulse-red {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.1; }
+    }
+
+    /* Timestamp */
+    .timestamp {
+      position: absolute;
+      bottom: 10px;
+      left: 15px;
+      font-size: 0.7rem;
+      color: #00ff00;
+      font-family: 'Roboto Mono', monospace;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 2px 6px;
+      border-radius: 2px;
+    }
+
+    @media (max-width: 1200px) {
+      .main-grid,
+      .charts-grid {
+        grid-template-columns: 1fr;
       }
     }
 
-    // Actualiza cada segundo
-    setInterval(actualizarStats, 1000);
-    // Actualiza al cargar la página
-    actualizarStats();
+    @media (max-width: 768px) {
+      body {
+        padding: 10px;
+      }
+      
+      h1 {
+        font-size: 1.4rem;
+        margin-bottom: 1.5rem;
+      }
+      
+      .video-container {
+        padding: 15px;
+      }
+      
+      .stat-card {
+        padding: 1rem;
+      }
+      
+      .stat-number {
+        font-size: 1.8rem;
+      }
+      
+      .system-status {
+        top: 10px;
+        right: 10px;
+      }
+
+      .chart-canvas {
+        height: 250px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Indicadores de sistema -->
+  <div class="system-status">
+    <div class="status-indicator online" title="Sistema Online"></div>
+    <div class="status-indicator recording" title="Grabando"></div>
+    <div class="status-indicator motion" title="Detección Activa"></div>
+  </div>
+
+  <div class="container">
+    <h1>Sistema de Monitoreo - Dashboard de Personas</h1>
+
+    <div class="main-grid">
+      <!-- Video en vivo -->
+      <div class="video-container">
+        <img src="/video" alt="Video en vivo">
+        <div class="timestamp" id="timestamp"></div>
+        <div class="scan-line"></div>
+      </div>
+
+      <!-- Estadísticas en tiempo real -->
+      <div class="stats-grid">
+        <div class="stat-card current">
+          <div class="stat-title">Personas Dentro</div>
+          <div class="stat-number" id="actuales">...</div>
+          <div class="stat-label">En tiempo real</div>
+        </div>
+
+        <div class="stat-card entries">
+          <div class="stat-title">Entradas</div>
+          <div class="stat-number" id="entradas">...</div>
+          <div class="stat-label">Total del día</div>
+        </div>
+
+        <div class="stat-card exits">
+          <div class="stat-title">Salidas</div>
+          <div class="stat-number" id="salidas">...</div>
+          <div class="stat-label">Total del día</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sección de gráficas -->
+    <div class="charts-section">
+      <div class="charts-grid">
+        <!-- Gráfica de flujo por horas -->
+        <div class="chart-container">
+          <div class="chart-title">Flujo por Horas (Hoy)</div>
+          <div class="chart-canvas">
+            <canvas id="chartHoras" width="400" height="300"></canvas>
+          </div>
+        </div>
+
+        <!-- Gráfica semanal -->
+        <div class="chart-container">
+          <div class="chart-title">Actividad Semanal</div>
+          <div class="chart-canvas">
+            <canvas id="chartSemanal" width="400" height="300"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let chartHoras, chartSemanal;
+
+    // Actualizar timestamp
+    function updateTimestamp() {
+      const now = new Date();
+      const timestamp = now.toLocaleString('es-MX', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+      document.getElementById('timestamp').textContent = timestamp;
+    }
+
+    // Inicializar gráficas
+    function initCharts() {
+      const ctxHoras = document.getElementById('chartHoras').getContext('2d');
+      const ctxSemanal = document.getElementById('chartSemanal').getContext('2d');
+
+      // Configuración común
+      const commonOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            labels: {
+              color: '#e0e0e0',
+              font: {
+                family: 'Roboto Mono',
+                size: 11
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            ticks: {
+              color: '#888',
+              font: {
+                family: 'Roboto Mono',
+                size: 10
+              }
+            },
+            grid: {
+              color: '#333'
+            }
+          },
+          y: {
+            ticks: {
+              color: '#888',
+              font: {
+                family: 'Roboto Mono',
+                size: 10
+              }
+            },
+            grid: {
+              color: '#333'
+            }
+          }
+        }
+      };
+
+      // Gráfica de flujo por horas
+      chartHoras = new Chart(ctxHoras, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: 'Entradas',
+              data: [],
+              borderColor: '#0099ff',
+              backgroundColor: 'rgba(0, 153, 255, 0.1)',
+              borderWidth: 2,
+              fill: false,
+              tension: 0.4
+            },
+            {
+              label: 'Salidas',
+              data: [],
+              borderColor: '#ff6600',
+              backgroundColor: 'rgba(255, 102, 0, 0.1)',
+              borderWidth: 2,
+              fill: false,
+              tension: 0.4
+            },
+            {
+              label: 'Flujo Neto',
+              data: [],
+              borderColor: '#00ff00',
+              backgroundColor: 'rgba(0, 255, 0, 0.1)',
+              borderWidth: 2,
+              fill: true,
+              tension: 0.4
+            }
+          ]
+        },
+        options: commonOptions
+      });
+
+      // Gráfica semanal
+      chartSemanal = new Chart(ctxSemanal, {
+        type: 'bar',
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: 'Entradas',
+              data: [],
+              backgroundColor: 'rgba(0, 153, 255, 0.7)',
+              borderColor: '#0099ff',
+              borderWidth: 1
+            },
+            {
+              label: 'Salidas',
+              data: [],
+              backgroundColor: 'rgba(255, 102, 0, 0.7)',
+              borderColor: '#ff6600',
+              borderWidth: 1
+            }
+          ]
+        },
+        options: commonOptions
+      });
+    }
+
+    // Actualizar contadores
+    function actualizarContadores() {
+      document.querySelectorAll('.stat-card').forEach(card => {
+        card.classList.add('updating');
+      });
+
+      fetch('/api/status')
+        .then(res => {
+          if (!res.ok) throw new Error('Error en la respuesta del servidor');
+          return res.json();
+        })
+        .then(data => {
+          updateCounter('entradas', data.entradas);
+          updateCounter('salidas', data.salidas);
+          updateCounter('actuales', data.actuales);
+
+          setTimeout(() => {
+            document.querySelectorAll('.stat-card').forEach(card => {
+              card.classList.remove('updating');
+            });
+          }, 500);
+        })
+        .catch(error => {
+          console.error('Error actualizando contadores:', error);
+          document.querySelectorAll('.stat-card').forEach(card => {
+            card.classList.remove('updating');
+          });
+        });
+    }
+
+    // Actualizar gráfica de horas
+    function actualizarGraficaHoras() {
+      fetch('/api/datos-hora')
+        .then(res => res.json())
+        .then(data => {
+          const labels = data.map(d => d.hora);
+          const entradas = data.map(d => d.entradas);
+          const salidas = data.map(d => d.salidas);
+          const flujo = data.map(d => d.flujo);
+
+          chartHoras.data.labels = labels;
+          chartHoras.data.datasets[0].data = entradas;
+          chartHoras.data.datasets[1].data = salidas;
+          chartHoras.data.datasets[2].data = flujo;
+          chartHoras.update('none');
+        })
+        .catch(error => console.error('Error actualizando gráfica de horas:', error));
+    }
+
+    // Actualizar gráfica semanal
+    function actualizarGraficaSemanal() {
+      fetch('/api/datos-semana')
+        .then(res => res.json())
+        .then(data => {
+          const labels = data.map(d => d.dia);
+          const entradas = data.map(d => d.entradas);
+          const salidas = data.map(d => d.salidas);
+
+          chartSemanal.data.labels = labels;
+          chartSemanal.data.datasets[0].data = entradas;
+          chartSemanal.data.datasets[1].data = salidas;
+          chartSemanal.update('none');
+        })
+        .catch(error => console.error('Error actualizando gráfica semanal:', error));
+    }
+
+    function updateCounter(id, newValue) {
+      const element = document.getElementById(id);
+      const currentValue = element.textContent;
+
+      if (currentValue !== newValue.toString()) {
+        element.style.transform = 'scale(1.1)';
+        element.style.transition = 'transform 0.2s ease';
+
+        setTimeout(() => {
+          element.textContent = newValue;
+          element.style.transform = 'scale(1)';
+        }, 100);
+      } else {
+        element.textContent = newValue;
+      }
+    }
+
+    // Inicialización
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('.stat-number').forEach(el => {
+        el.classList.add('loading');
+      });
+      
+      setTimeout(() => {
+        document.querySelectorAll('.stat-number').forEach(el => {
+          el.classList.remove('loading');
+        });
+      }, 1000);
+
+      initCharts();
+      
+      // Llamadas iniciales
+      actualizarContadores();
+      actualizarGraficaHoras();
+      actualizarGraficaSemanal();
+    });
+
+    // Intervalos de actualización
+    setInterval(actualizarContadores, 2000);
+    setInterval(actualizarGraficaHoras, 30000); // Cada 30 segundos
+    setInterval(actualizarGraficaSemanal, 300000); // Cada 5 minutos
+    setInterval(updateTimestamp, 1000);
+    
+    // Actualizar timestamp inicial
+    updateTimestamp();
   </script>
 </body>
 </html>
