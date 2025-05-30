@@ -197,7 +197,7 @@ def gen_frames():
                     cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
             # Línea de conteo
-            cv2.line(frame, (line_x, 0), (line_x, frame.shape[0]), (255, 255, 255), 2)
+            cv2.line(frame, (line_x, 0), (line_x, frame.shape[0]), (0, 0, 255), 2)
 
             # Texto en video
             cv2.putText(frame, f'IN: {in_count}', (30, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
